@@ -26,7 +26,9 @@ int pcd_open(struct inode *inode, struct file *filp);
 
 char device_buffer[DEV_MEM_SIZE];
 dev_t device_number;
-struct class *class_pcd; // Pointer to the device class
+struct class *class_pcd;   // Pointer to the device class
+struct device *device_pcd; // Pointer to the device
+
 struct cdev pcd_cdev = {
     .owner = THIS_MODULE, // current module identification
     .ops = NULL,          // Will be set later
@@ -117,18 +119,30 @@ static int __init pcd_driver_init(void)
 
     /* 4. Create Device class under /sys/class*/
     class_pcd = class_create(THIS_MODULE, CLASS_NAME);
-    if (IS_ERR(class_pcd))
+    if (IS_ERR(class_pcd)) // convert void pointer to struct class pointer
     {
         printk(KERN_ALERT "Failed to create device class\n");
         cdev_del(&pcd_cdev);                        // Remove the cdev
         unregister_chrdev_region(device_number, 1); // Unregister the device number
-        return PTR_ERR(class_pcd);
+        return PTR_ERR(class_pcd);                  // convert void pointer to int pointer
     }
     printk(KERN_INFO "Device class created successfully\n");
 
     /* 5. Create Device under /dev - Populate the sysfs with device information*/
-    device_create(class_pcd, NULL, device_number, NULL, DEVICE_NAME);
+    device_pcd = device_create(class_pcd, NULL, device_number, NULL, DEVICE_NAME);
+    if (IS_ERR(device_pcd))
+    {
+        printk(KERN_ALERT "Failed to create device\n");
+        class_destroy(class_pcd);                   // Destroy the class
+        cdev_del(&pcd_cdev);                        // Remove the cdev
+        unregister_chrdev_region(device_number, 1); // Unregister the device number
+        return PTR_ERR(device_pcd);
+    }
+
     printk(KERN_INFO "Device created successfully: %s\n", DEVICE_NAME);
+
+    // device_pcd->class = class_pcd; // Set the class for the device
+    // device_pcd->devt = device_number; // Set the device number for the device
 
     printk(KERN_INFO "Pseudo Character Device Driver Initialization Complete\n");
 

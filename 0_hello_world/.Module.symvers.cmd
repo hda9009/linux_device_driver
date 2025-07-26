@@ -1,0 +1,1 @@
+savedcmd_/home/hda/Desktop/workspace/vscode/device_drivers/0_hello_world/Module.symvers :=  scripts/mod/modpost -M -m -a      -o /home/hda/Desktop/workspace/vscode/device_drivers/0_hello_world/Module.symvers -T /home/hda/Desktop/workspace/vscode/device_drivers/0_hello_world/modules.order -i Module.symvers -e 

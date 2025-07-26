@@ -31,6 +31,10 @@ run:
 	sudo insmod main.ko
 	sudo dmesg
 
+dump:
+	@echo "Dumping memory objects..."
+	arm-linux-gnueabihf-objdump -h main.ko
+
 exit:
 	@echo "Removing the module..."
 	sudo rmmod main
@@ -44,3 +48,9 @@ help:
 	@echo "  make clean          - Clean the build files"
 	@echo "  make help           - Show this help message"
 	#make ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C $(KDIR) M=$(PWD) help
+
+
+
+
+
+
