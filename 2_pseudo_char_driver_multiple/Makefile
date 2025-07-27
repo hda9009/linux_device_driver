@@ -26,7 +26,7 @@ host:
 send:
 	scp -r $(PATH) debian@192.168.7.2:/home/debian/workspace/device_drivers
 
-run:
+r:
 	@echo "Executing the module..."
 	sudo insmod main.ko
 	sudo dmesg
@@ -35,7 +35,7 @@ dump:
 	@echo "Dumping memory objects..."
 	arm-linux-gnueabihf-objdump -h main.ko
 
-exit:
+e:
 	@echo "Removing the module..."
 	sudo rmmod main
 	sudo dmesg

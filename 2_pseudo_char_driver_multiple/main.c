@@ -7,6 +7,7 @@
 #include <linux/cdev.h>
 #include <linux/kdev_t.h>
 #include <linux/errno.h>
+#include <linux/miscdevice.h>
 
 uint8_t i = 0;
 #define EXIT_SUCCESS 0
@@ -24,11 +25,17 @@ uint8_t i = 0;
 static int __init pcd_driver_init(void);
 static void __exit pcd_driver_exit(void);
 
+static char *devnode(struct device *dev, umode_t *mode);
+
 loff_t pcd_llseek(struct file *filp, loff_t offset, int whence);
 ssize_t pcd_read(struct file *filp, char __user *buf, size_t count, loff_t *position);
 ssize_t pcd_write(struct file *filp, const char __user *buf, size_t count, loff_t *position);
 int pcd_release(struct inode *inode, struct file *filp);
 int pcd_open(struct inode *inode, struct file *filp);
+
+#define RDONLY 0x01
+#define WRONLY 0x10
+#define RDWR 0x11
 
 char device_buffer_pcd_1[DEV_MEM_SIZE_PCD_1];
 char device_buffer_pcd_2[DEV_MEM_SIZE_PCD_2];
@@ -41,9 +48,8 @@ struct pcdev_private_data
     char *buffer;              // Pointer to the device buffer
     size_t size;               // Size of the device buffer
     int minor;                 // Minor number of the device
-    int permissions;           // Permissions for the device
+    int perm;                  // Permissions for the device
     const char *serial_number; // Serial number of the device
-
     struct cdev cdev;
 };
 
@@ -53,6 +59,7 @@ struct pcdrv_private_data
     dev_t device_number;       // Device number for the device
     struct class *class_pcd;   // Pointer to the device class
     struct device *device_pcd; // Pointer to the device
+
     struct pcdev_private_data
         pcdev_data[MAX_DEVICE_FILE]; // Pointer to the array of device private data
 };
@@ -66,7 +73,7 @@ struct pcdrv_private_data pcdrv_data = {
             .buffer = device_buffer_pcd_1,
             .size = DEV_MEM_SIZE_PCD_1,
             .minor = 0,
-            .permissions = 0666,
+            .perm = RDONLY, // Read-only permissions
             .serial_number = "pseudo_char_device_1",
             .cdev = {
                 .owner = THIS_MODULE, // current module identification
@@ -79,7 +86,7 @@ struct pcdrv_private_data pcdrv_data = {
             .buffer = device_buffer_pcd_2,
             .size = DEV_MEM_SIZE_PCD_2,
             .minor = 1,
-            .permissions = 0666,
+            .perm = WRONLY, // Write-only permissions
             .serial_number = "pseudo_char_device_2",
             .cdev = {
                 .owner = THIS_MODULE, // current module identification
@@ -92,7 +99,7 @@ struct pcdrv_private_data pcdrv_data = {
             .buffer = device_buffer_pcd_3,
             .size = DEV_MEM_SIZE_PCD_3,
             .minor = 2,
-            .permissions = 0666,
+            .perm = RDWR, // Read-write permissions
             .serial_number = "pseudo_char_device_3",
             .cdev = {
                 .owner = THIS_MODULE, // current module identification
@@ -105,7 +112,7 @@ struct pcdrv_private_data pcdrv_data = {
             .buffer = device_buffer_pcd_4,
             .size = DEV_MEM_SIZE_PCD_4,
             .minor = 3,
-            .permissions = 0666,
+            .perm = RDWR, // Read-write permissions
             .serial_number = "pseudo_char_device_4",
             .cdev = {
                 .owner = THIS_MODULE, // current module identification
@@ -147,20 +154,25 @@ static int __init pcd_driver_init(void)
         unregister_chrdev_region(pcdrv_data.device_number, MAX_DEVICE_FILE); // Unregister the device number
         return PTR_ERR(pcdrv_data.class_pcd);                                // convert void pointer to int pointer
     }
-    printk(KERN_INFO "Device class created successfully\n");
 
-    pr_info("%s : Device number allocated for files \n", __func__);
+    // pcdrv_data.class_pcd->devnode = devnode; // Set the device node function for the class
+
+    printk(KERN_INFO "Device class created successfully for all %d devices\n\n", pcdrv_data.total_devices);
+
+    // pr_info("%s : Device number allocated for files \n", __func__);
+
     /* 3. Register the character device with VFS */
     /*  for multiple devices, we need to create cdev variable 10 devices, we need to create 10 cdev variables         */
 
     for (i = 0; i < pcdrv_data.total_devices; i++)
     {
-        pr_info("\n[device_file = %d] Major:Minor = %d, %d\n", (i + 1), MAJOR(pcdrv_data.device_number + i), MINOR(pcdrv_data.device_number + i));
+        pr_info("\n[device_file = %d] Major:Minor = %d, %d ", (i), MAJOR(pcdrv_data.device_number + i), MINOR(pcdrv_data.device_number + i));
 
         cdev_init(&pcdrv_data.pcdev_data[i].cdev, &pcd_fops);
-        pcdrv_data.pcdev_data[i].cdev.owner = THIS_MODULE;                             // Set the owner of the cdev
-        pcdrv_data.pcdev_data[i].cdev.ops = &pcd_fops;                                 // Set the file operations for the cdev
-        pcdrv_data.pcdev_data[i].cdev.dev = MKDEV(MAJOR(pcdrv_data.device_number), i); // Set the device number for the cdev
+        pcdrv_data.pcdev_data[i].cdev.owner = THIS_MODULE; // Set the owner of the cdev
+        pcdrv_data.pcdev_data[i].cdev.ops = &pcd_fops;     // Set the file operations for the cdev
+        pcdrv_data.pcdev_data[i].cdev.dev =
+            MKDEV(MAJOR(pcdrv_data.device_number + i), MINOR(pcdrv_data.device_number + i)); // Set the device number for the cdev
 
         /* 4. Add the char device to the system for 1 file */
         if (cdev_add(&pcdrv_data.pcdev_data[i].cdev, pcdrv_data.device_number + i, 1) < 0)
@@ -182,10 +194,10 @@ static int __init pcd_driver_init(void)
             return PTR_ERR(pcdrv_data.device_pcd);
         }
 
-        printk(KERN_INFO "Device created successfully: %s\n", pcdrv_data.pcdev_data[i].serial_number);
+        printk(KERN_INFO "-%s\n", dev_name(pcdrv_data.device_pcd));
     }
 
-    printk(KERN_INFO "Pseudo Character Device Driver Initialization Complete\n");
+    printk(KERN_INFO "\nPseudo Character Device Driver Initialization Complete\n");
 
     return EXIT_SUCCESS;
 }
@@ -196,14 +208,10 @@ static void __exit pcd_driver_exit(void)
 
     for (i = 0; i < pcdrv_data.total_devices; i++)
     {
-
         /* 1. Remove the device from sysfs */
-        device_destroy(pcdrv_data.class_pcd, pcdrv_data.device_number);
+        device_destroy(pcdrv_data.class_pcd, pcdrv_data.device_number + i);
 
-        /* 2. Unregister the device class */
-        class_destroy(pcdrv_data.class_pcd);
-
-        /* 3. Remove the cdev from the system */
+        /* 2. Remove the cdev from the system */
         cdev_del(&pcdrv_data.pcdev_data[i].cdev);
 
         // cdev_deinit(&cdev); // Deinitialize the cdev
@@ -212,25 +220,46 @@ static void __exit pcd_driver_exit(void)
         // Note: The device number is freed automatically when the cdev is removed
         // If you want to explicitly free it, you can use unregister_chrdev_region
         // but it's not necessary here as we are already removing the cdev.
-
-        /* 5. Unregister the character device region */
-        unregister_chrdev_region(pcdrv_data.device_number, MAX_DEVICE_FILE);
     }
+
+    /* 3. Unregister the device class */
+    class_destroy(pcdrv_data.class_pcd);
+
+    /* 4. Unregister the character device region */
+    unregister_chrdev_region(pcdrv_data.device_number, MAX_DEVICE_FILE);
 
     printk(KERN_INFO "Pseudo Character Device Driver Cleanup Complete\n");
 }
 
-#if 0
+static char *devnode(struct device *dev, umode_t *mode)
+{
+    if (mode)
+    {
+        *mode = 0777; // Set the default permissions for the device node
+    }
+    pr_info("devnode called for device: %s\n", dev_name(dev));
+    // Return the device name as the node name
+    return kasprintf(GFP_KERNEL, "%s/%s", dev_name(dev), DEVICE_NAME);
+}
 
 loff_t pcd_llseek(struct file *filp, loff_t offset, int whence)
 {
+    struct pcdev_private_data *file_private_data = (struct pcdev_private_data *)filp->private_data;
+
     pr_info("pcd_llseek called with offset: %lld, whence: %d\n", offset, whence);
+
+    if (!file_private_data)
+    {
+        pr_err("File private data is NULL\n");
+        return -EINVAL; // Invalid argument
+    }
+    pr_info("Current file position: %lld\n", filp->f_pos);
 
     switch (whence)
     {
     case SEEK_SET:
     {
-        if (offset < 0 || offset > DEV_MEM_SIZE)
+        if (offset < 0 || offset > file_private_data->size)
         {
             pr_err("Invalid offset for SEEK_SET\n");
             return -EINVAL; // Invalid argument
@@ -241,7 +270,7 @@ loff_t pcd_llseek(struct file *filp, loff_t offset, int whence)
     }
     case SEEK_CUR:
     {
-        if (filp->f_pos + offset < 0 || filp->f_pos + offset > DEV_MEM_SIZE)
+        if (filp->f_pos + offset < 0 || filp->f_pos + offset > file_private_data->size)
         {
             pr_err("Invalid offset for SEEK_CUR\n");
             return -EINVAL; // Invalid argument
@@ -251,12 +280,12 @@ loff_t pcd_llseek(struct file *filp, loff_t offset, int whence)
     }
     case SEEK_END:
     {
-        if (DEV_MEM_SIZE + offset < 0 || DEV_MEM_SIZE + offset > DEV_MEM_SIZE)
+        if (file_private_data->size + offset < 0 || file_private_data->size + offset > file_private_data->size)
         {
             pr_err("Invalid offset for SEEK_END\n");
             return -EINVAL; // Invalid argument
         }
-        filp->f_pos = DEV_MEM_SIZE + offset;
+        filp->f_pos = file_private_data->size + offset;
         break;
     }
     default:
@@ -272,24 +301,32 @@ loff_t pcd_llseek(struct file *filp, loff_t offset, int whence)
 
 ssize_t pcd_read(struct file *filp, char __user *buf, size_t count, loff_t *position)
 {
+    struct pcdev_private_data *file_private_data = (struct pcdev_private_data *)filp->private_data;
 
     pr_info("Before pcd_read: Read %zu bytes from file position %lld\n", count, *position);
 
-    if (*position >= DEV_MEM_SIZE)
+    if (!file_private_data)
+    {
+        pr_err("File private data is NULL\n");
+        return -EINVAL; // Invalid argument
+    }
+    pr_info("Current file position: %lld\n", filp->f_pos);
+
+    if (*position >= file_private_data->size)
     {
         pr_info("End of file reached, no more data to read\n");
         return 0; // End of file
     }
 
     /* Check for excess beyond buffer size - 512 Bytes */
-    if (*position + count > DEV_MEM_SIZE)
+    if (*position + count > file_private_data->size)
     {
         pr_info("Adjusting count to prevent overflow\n");
-        count = DEV_MEM_SIZE - *position; // Adjust count to prevent overflow
+        count = file_private_data->size - *position; // Adjust count to prevent overflow
     }
 
     /* Copy data from device buffer to user space */
-    if (copy_to_user(buf, device_buffer + *position, count) != 0)
+    if (copy_to_user(buf, file_private_data->buffer + *position, count) != 0)
     {
         pr_err("Failed to copy data to user space\n");
         return -EFAULT; // Return error if copy fails
@@ -305,6 +342,8 @@ ssize_t pcd_read(struct file *filp, char __user *buf, size_t count, loff_t *posi
 
 ssize_t pcd_write(struct file *filp, const char __user *buf, size_t count, loff_t *position)
 {
+    struct pcdev_private_data *file_private_data = (struct pcdev_private_data *)filp->private_data;
+
     pr_info("Before pcd_write: Wrote %zu bytes to file position %lld\n", count, *position);
 
     if (count == 0)
@@ -312,14 +351,21 @@ ssize_t pcd_write(struct file *filp, const char __user *buf, size_t count, loff_
         return -ENOMEM; // Nothing to write
     }
 
-    /* Check for excess beyond buffer size - 512 Bytes */
-    if (*position + count > DEV_MEM_SIZE)
+    if (!file_private_data)
     {
-        count = DEV_MEM_SIZE - *position; // Adjust count to prevent overflow
+        pr_err("File private data is NULL\n");
+        return -EINVAL; // Invalid argument
+    }
+    pr_info("Current file position: %lld\n", filp->f_pos);
+
+    /* Check for excess beyond buffer size - 512 Bytes */
+    if (*position + count > file_private_data->size)
+    {
+        count = file_private_data->size - *position; // Adjust count to prevent overflow
     }
 
     /* Copy data from user space to device buffer */
-    if (copy_from_user(device_buffer + *position, buf, count) != 0)
+    if (copy_from_user(file_private_data->buffer + *position, buf, count) != 0)
     {
         pr_err("Failed to copy data from user space\n");
         return -EFAULT; // Return error if copy fails
@@ -332,46 +378,75 @@ ssize_t pcd_write(struct file *filp, const char __user *buf, size_t count, loff_
 
     return count; // Return the number of bytes successfuly written
 }
-#endif
 
 int pcd_release(struct inode *inode, struct file *filp)
 {
-    if (filp->f_mode & FMODE_READ)
-    {
-        pr_info("\n***pcd_release for read is successful***\n\n");
-    }
-    else
-    {
-        pr_info("\n***pcd_release for write is successful***\n\n");
-    }
+    pr_info("\n***pcd_release is successful***\n\n");
     return EXIT_SUCCESS;
+}
+
+int check_permissions(struct file *filp, int mode)
+{
+    struct pcdev_private_data *private_data = (struct pcdev_private_data *)filp->private_data;
+
+    if ((mode & private_data->perm) != mode)
+    {
+        pr_err("Permission denied for mode: %d\n", mode);
+        return -EACCES; // Permission denied
+    }
+    return EXIT_SUCCESS; // Permissions are valid
 }
 
 int pcd_open(struct inode *inode, struct file *filp)
 {
-    int ret = 0;
     int minor_number;
+    struct pcdev_private_data *private_data;
 
     minor_number = MINOR(inode->i_rdev); // Get the minor number from the inode
-    pr_info("pcd_open called for minor number: %d\n", minor_number);
-    
-    if (minor_number >= pcdrv_data.total_devices)
+    pr_info("\n***cdev for minor number %d is %p***\n", minor_number, inode->i_cdev);
+
+    // Check if the minor number is valid
+    if (minor_number < 0 || minor_number >= MAX_DEVICE_FILE)
     {
         pr_err("Invalid minor number: %d\n", minor_number);
         return -ENODEV; // No such device
     }
+
+    // container_of is used because if we dont have the array and the device private data structure is allocated dynamically through probe function
+    // Store the private data in the file structure
+    private_data = container_of(inode->i_cdev, struct pcdev_private_data, cdev);
+
+    // Assign the private data to the file structure
+    filp->private_data = private_data;
+
+#if 0
     filp->private_data = &pcdrv_data.pcdev_data[minor_number]; // Store the private data in the file structure
     pr_info("pcd_open: Device %s opened successfully\n", pcdrv_data.pcdev_data[minor_number].serial_number);
+#endif
 
-        if (filp->f_mode & FMODE_READ)
+    if ((private_data->perm & WRONLY) && (filp->f_mode & FMODE_READ) && (filp->f_mode & FMODE_WRITE)) // file is open for read & write both
     {
-        pr_info("\n\n***pcd_open for read is successful***\n");
+        pr_info("\n\n***pcd_open for read & write is successful***\n");
+        return EXIT_SUCCESS;
     }
-    else
+    if ((private_data->perm & RDONLY) && (filp->f_mode & FMODE_READ) && !(filp->f_mode & FMODE_WRITE)) // file is open for read only
     {
-        pr_info("\n\n***pcd_open for write is successful***\n");
+        pr_info("\n\n***pcd_open for read only is successful***\n");
+        return EXIT_SUCCESS;
     }
-    return EXIT_SUCCESS;
+    if ((private_data->perm & WRONLY) && !(filp->f_mode & FMODE_READ) && (filp->f_mode & FMODE_WRITE)) // file is open for write only
+    {
+        pr_info("\n\n***pcd_open for write only is successful***\n");
+        return EXIT_SUCCESS;
+    }
+    // if ((private_data->perm & EXEC) && (filp->f_mode & FMODE_WRITE) && (filp->f_mode & FMODE_READ))
+    // {
+    //     pr_info("\n\n***pcd_open for read, write & execute is successful***\n");
+    //     return EXIT_SUCCESS;
+    // }
+
+    pr_err("Invalid file mode: %d\n", filp->f_mode);
+    return -EINVAL; // Invalid argument
 }
 
 module_init(pcd_driver_init);
