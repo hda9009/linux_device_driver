@@ -1,1 +1,0 @@
-savedcmd_/home/hda/Desktop/workspace/vscode/device_drivers/0_hello_world/modules.order := {   echo /home/hda/Desktop/workspace/vscode/device_drivers/0_hello_world/hello_world.o; :; } > /home/hda/Desktop/workspace/vscode/device_drivers/0_hello_world/modules.order
