@@ -14,6 +14,11 @@
 #include <linux/platform_device.h>
 #include <linux/utsname.h>
 #include <linux/slab.h>
+// #include <linux/types.h>
+// #include <linux/idr.h>
+// #include <linux/ktime.h>
+// #include <linux/err.h>
+// #include <linux/kobject.h>
 
 uint8_t i = 0;
 #define EXIT_SUCCESS 0
@@ -40,6 +45,7 @@ int pcd_release(struct inode *inode, struct file *filp);
 int pcd_open(struct inode *inode, struct file *filp);
 
 struct device_driver my_driver;
+struct platform_driver my_platform_driver1;
 struct platform_device *my_platform_device;
 
 struct file_operations pcd_fops;
