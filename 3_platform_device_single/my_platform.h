@@ -29,9 +29,6 @@
 
 #define MAX_DEVICES 1
 
-void my_platform_device_release(struct device *dev);
-int my_platform_device_probe(struct device *my_platform_device);
-// int my_platform_device_remove(struct device *my_platform_device);
 int my_platform_driver_probe(struct platform_device *my_platform_device);
 int my_platform_driver_remove(struct platform_device *my_platform_device);
 
