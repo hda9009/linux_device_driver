@@ -15,17 +15,19 @@
 #include <linux/utsname.h>
 #include <linux/slab.h>
 
-uint8_t i = 0;
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE -1
 
 #define RD_ONLY 0x01
 #define WR_ONLY 0x10
 #define RDWR 0x11
-#define DEVICE_NAME "my_platform_device"
+
+#define DEVICE_NAME "my_platform_device_1"
+#define DEVICE_ID 1
+#define DRV_DEVICE_NAME "my_platform_driver"
 #define CLASS_NAME "my_platform_class"
 
-#define MAX_DEVICES 5
+#define MAX_DEVICES 1
 
 void my_platform_device_release(struct device *dev);
 int my_platform_device_probe(struct device *my_platform_device);
@@ -39,36 +41,28 @@ ssize_t pcd_write(struct file *filp, const char __user *buf, size_t count, loff_
 int pcd_release(struct inode *inode, struct file *filp);
 int pcd_open(struct inode *inode, struct file *filp);
 
-struct device_driver my_driver;
-struct platform_device *my_platform_device;
-
-struct file_operations pcd_fops;
-struct new_utsname my_kernel_version;
-// struct pcdevice_private_data *my_device_private_data;
-struct pcdriver_private_data my_driver_private_data;
-
-struct pcdevice_platform_data
+struct pcdev_platform_data
 {
-    int size;
-    int perm;
-    const char *serial_number;
+    const char *device_serial_number; // Pointer to the device buffer
+    size_t size;                      // Size of the device buffer
+    int permissions;                  // Permissions for the device
 };
 
-struct pcdevice_private_data
+struct platform_device_private_data
 {
-    struct pcdevice_platform_data my_driver_platform_data;
-    char *buffer;
-    dev_t device_number;
-    struct cdev *cdev;
+    char *buffer;        // Pointer to the device buffer
+    dev_t device_number; // Device number for the device
+    struct cdev cdev;    // for file operation
+    struct pcdev_platform_data pdata;
 };
 
-struct pcdriver_private_data
+struct platform_driver_private_data
 {
     int total_devices;
-    dev_t device_num_base;
-    struct class *class;
-    struct device *device;
-    // struct platform_device *pdev;
-    // struct file_operations *fops;
+    dev_t device_num_base; // initialized major number
+    struct class *driver_class;
+    struct device *driver_device;
+    // struct platform_device *platform_device;
 };
+
 #endif /* _PLATFORM_H_ */
