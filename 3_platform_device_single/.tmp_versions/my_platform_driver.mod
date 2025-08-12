@@ -1,0 +1,3 @@
+/home/hda/Desktop/workspace/vscode/linux_device_driver/3_platform_device_single/my_platform_driver.ko
+/home/hda/Desktop/workspace/vscode/linux_device_driver/3_platform_device_single/my_platform_driver.o
+
