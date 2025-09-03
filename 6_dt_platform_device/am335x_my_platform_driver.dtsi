@@ -1,0 +1,21 @@
+/ {
+
+    platform_device_dt_1 {
+                        compatible = "my_platform_device_dt_compatible_1";
+                        org,size = <512>;
+                        org,device_serial_number = "my_platform_device_dt_1";
+                        org,permissions = <0x11>;
+    };
+    platform_device_dt_2 {
+                        compatible = "my_platform_device_dt_compatible_2";
+                        org,size = <1024>;
+                        org,device_serial_number = "my_platform_device_dt_2";
+                        org,permissions = <0x11>;
+    };
+    platform_device_dt_3 {
+                        compatible = "my_platform_device_dt_compatible_3";
+                        org,size = <2048>;
+                        org,device_serial_number = "my_platform_device_dt_3";
+                        org,permissions = <0x11>;
+    };
+};
